@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (extras.classList.contains("collapsed")) {
+            expandcollapse.classList.add("expander")
+        } else if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    sort_column(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report2021-05-21-14-57-42.html</h1>
+    <p>Report generated on 21-May-2021 at 14:57:43 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a> v2.1.1</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>JAVA_HOME</td>
+        <td>C:\Program Files\Java\jdk-14.0.2</td></tr>
+      <tr>
+        <td>Packages</td>
+        <td>{"pluggy": "0.13.1", "py": "1.9.0", "pytest": "5.4.3"}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Windows-10-10.0.19041-SP0</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{"allure-pytest": "2.8.18", "forked": "1.3.0", "html": "2.1.1", "metadata": "1.10.0", "rerunfailures": "9.1", "xdist": "2.1.0"}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.8.5</td></tr></table>
+    <h2>Summary</h2>
+    <p>8 tests ran in 0.46 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">5 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">3 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>, <input checked="true" class="filter" data-test-result="rerun" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="rerun">0 rerun</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">test_request.py::TestSelect::test_select[CaseName1-inBody1-expData1]</td>
+          <td class="col-duration">0.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_case.test_request.TestSelect object at 0x000002CFDCA7ACD0&gt;<br/>CaseName = text:&#x27;查询接口_1002&#x27; (XF:104)<br/>inBody = {&#x27;cameraParams&#x27;: [{&#x27;cameraId&#x27;: &#x27;2&#x27;, &#x27;isLocal&#x27;: 0}], &#x27;controlIds&#x27;: [], &#x27;endTime&#x27;: &#x27;&#x27;, &#x27;pageIndex&#x27;: 1, ...}<br/>expData = {&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功01&#x27;}<br/><br/>    @pytest.mark.parametrize(&#x27;CaseName,inBody,expData&#x27;,get_excel_data(&#x27;1-登录模块&#x27;,&#x27;select&#x27;))<br/>    def test_select(self,CaseName,inBody,expData):<br/>        logger.debug(&quot;\n ==========【查询】测试用例开始 ==========:&quot;+str(CaseName))<br/>        res = Msg().add_msg(inBody,getToken=True)<br/>        logger.debug(&#x27;\n ----------【实际结果】 ----------:&#x27; + str(res))<br/>        logger.debug(&#x27;\n ----------【预期结果】 ----------:&#x27; + str(expData))<br/>        try:<br/>&gt;           assert res[&#x27;message&#x27;] == expData[&#x27;message&#x27;]<br/><span class="error">E           AssertionError: assert &#x27;操作成功&#x27; == &#x27;操作成功01&#x27;</span><br/><span class="error">E             - 操作成功01</span><br/><span class="error">E             ?     --</span><br/><span class="error">E             + 操作成功</span><br/><br/>test_request.py:60: AssertionError<br/><br/>During handling of the above exception, another exception occurred:<br/><br/>self = &lt;test_case.test_request.TestSelect object at 0x000002CFDCA7ACD0&gt;<br/>CaseName = text:&#x27;查询接口_1002&#x27; (XF:104)<br/>inBody = {&#x27;cameraParams&#x27;: [{&#x27;cameraId&#x27;: &#x27;2&#x27;, &#x27;isLocal&#x27;: 0}], &#x27;controlIds&#x27;: [], &#x27;endTime&#x27;: &#x27;&#x27;, &#x27;pageIndex&#x27;: 1, ...}<br/>expData = {&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功01&#x27;}<br/><br/>    @pytest.mark.parametrize(&#x27;CaseName,inBody,expData&#x27;,get_excel_data(&#x27;1-登录模块&#x27;,&#x27;select&#x27;))<br/>    def test_select(self,CaseName,inBody,expData):<br/>        logger.debug(&quot;\n ==========【查询】测试用例开始 ==========:&quot;+str(CaseName))<br/>        res = Msg().add_msg(inBody,getToken=True)<br/>        logger.debug(&#x27;\n ----------【实际结果】 ----------:&#x27; + str(res))<br/>        logger.debug(&#x27;\n ----------【预期结果】 ----------:&#x27; + str(expData))<br/>        try:<br/>            assert res[&#x27;message&#x27;] == expData[&#x27;message&#x27;]<br/>        except:<br/>            logger.debug(&quot;\n ==========【查询】用例失败,预期结果与实际结果不一致==========&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>test_request.py:63: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>DEBUG    root:test_request.py:55 
+ ==========【查询】测试用例开始 ==========:text:&#x27;查询接口_1002&#x27; (XF:104)
+DEBUG    root:test_request.py:57 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 200, &#x27;success&#x27;: True, &#x27;message&#x27;: &#x27;操作成功&#x27;, &#x27;data&#x27;: {&#x27;total&#x27;: 2766, &#x27;records&#x27;: [{&#x27;id&#x27;: 10497, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 2, &#x27;controlName&#x27;: &#x27;倒地&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_FallGround_1621573510566.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 13:05:10&#x27;}, {&#x27;id&#x27;: 10496, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 2, &#x27;controlName&#x27;: &#x27;倒地&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_FallGround_1621573027922.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 12:57:08&#x27;}, {&#x27;id&#x27;: 10487, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_HoldHead_1621570312943.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 12:11:53&#x27;}, {&#x27;id&#x27;: 10486, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 2, &#x27;controlName&#x27;: &#x27;倒地&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_FallGround_1621569367286.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:56:07&#x27;}, {&#x27;id&#x27;: 10484, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 2, &#x27;controlName&#x27;: &#x27;倒地&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_FallGround_1621569342250.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:55:42&#x27;}, {&#x27;id&#x27;: 10485, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 2, &#x27;controlName&#x27;: &#x27;倒地&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_FallGround_1621569342553.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:55:42&#x27;}, {&#x27;id&#x27;: 10324, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 9, &#x27;controlName&#x27;: &#x27;皮带跑偏&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wheel_1621567270583.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:21:10&#x27;}, {&#x27;id&#x27;: 10288, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 7, &#x27;controlName&#x27;: &#x27;无人值守&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_JobNoWorker_1621567254082.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:20:54&#x27;}, {&#x27;id&#x27;: 10277, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 9, &#x27;controlName&#x27;: &#x27;皮带跑偏&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wheel_1621567096092.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:18:16&#x27;}, {&#x27;id&#x27;: 10271, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 7, &#x27;controlName&#x27;: &#x27;无人值守&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_JobNoWorker_1621567093846.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:18:14&#x27;}, {&#x27;id&#x27;: 10202, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 7, &#x27;controlName&#x27;: &#x27;无人值守&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_JobNoWorker_1621567063583.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:17:43&#x27;}, {&#x27;id&#x27;: 10194, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 9, &#x27;controlName&#x27;: &#x27;皮带跑偏&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wheel_1621567049758.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:17:30&#x27;}, {&#x27;id&#x27;: 10149, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 7, &#x27;controlName&#x27;: &#x27;无人值守&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_JobNoWorker_1621567032163.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:17:12&#x27;}, {&#x27;id&#x27;: 10131, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 9, &#x27;controlName&#x27;: &#x27;皮带跑偏&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wheel_1621567014189.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:16:54&#x27;}], &#x27;pageIndex&#x27;: 1, &#x27;pageSize&#x27;: 14}, &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+DEBUG    root:test_request.py:58 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功01&#x27;}
+DEBUG    root:test_request.py:62 
+ ==========【查询】用例失败,预期结果与实际结果不一致==========<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">test_request.py::TestSelect::test_select[CaseName2-inBody2-expData2]</td>
+          <td class="col-duration">0.06</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_case.test_request.TestSelect object at 0x000002CFDCACF1C0&gt;<br/>CaseName = text:&#x27;查询接口_1003&#x27; (XF:104)<br/>inBody = {&#x27;cameraParams&#x27;: [], &#x27;controlIds&#x27;: [], &#x27;endTime&#x27;: &#x27;2021-5-20 11:00:00&#x27;, &#x27;pageIndex&#x27;: 1, ...}<br/>expData = {&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功02&#x27;}<br/><br/>    @pytest.mark.parametrize(&#x27;CaseName,inBody,expData&#x27;,get_excel_data(&#x27;1-登录模块&#x27;,&#x27;select&#x27;))<br/>    def test_select(self,CaseName,inBody,expData):<br/>        logger.debug(&quot;\n ==========【查询】测试用例开始 ==========:&quot;+str(CaseName))<br/>        res = Msg().add_msg(inBody,getToken=True)<br/>        logger.debug(&#x27;\n ----------【实际结果】 ----------:&#x27; + str(res))<br/>        logger.debug(&#x27;\n ----------【预期结果】 ----------:&#x27; + str(expData))<br/>        try:<br/>&gt;           assert res[&#x27;message&#x27;] == expData[&#x27;message&#x27;]<br/><span class="error">E           AssertionError: assert &#x27;操作成功&#x27; == &#x27;操作成功02&#x27;</span><br/><span class="error">E             - 操作成功02</span><br/><span class="error">E             ?     --</span><br/><span class="error">E             + 操作成功</span><br/><br/>test_request.py:60: AssertionError<br/><br/>During handling of the above exception, another exception occurred:<br/><br/>self = &lt;test_case.test_request.TestSelect object at 0x000002CFDCACF1C0&gt;<br/>CaseName = text:&#x27;查询接口_1003&#x27; (XF:104)<br/>inBody = {&#x27;cameraParams&#x27;: [], &#x27;controlIds&#x27;: [], &#x27;endTime&#x27;: &#x27;2021-5-20 11:00:00&#x27;, &#x27;pageIndex&#x27;: 1, ...}<br/>expData = {&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功02&#x27;}<br/><br/>    @pytest.mark.parametrize(&#x27;CaseName,inBody,expData&#x27;,get_excel_data(&#x27;1-登录模块&#x27;,&#x27;select&#x27;))<br/>    def test_select(self,CaseName,inBody,expData):<br/>        logger.debug(&quot;\n ==========【查询】测试用例开始 ==========:&quot;+str(CaseName))<br/>        res = Msg().add_msg(inBody,getToken=True)<br/>        logger.debug(&#x27;\n ----------【实际结果】 ----------:&#x27; + str(res))<br/>        logger.debug(&#x27;\n ----------【预期结果】 ----------:&#x27; + str(expData))<br/>        try:<br/>            assert res[&#x27;message&#x27;] == expData[&#x27;message&#x27;]<br/>        except:<br/>            logger.debug(&quot;\n ==========【查询】用例失败,预期结果与实际结果不一致==========&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>test_request.py:63: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>DEBUG    root:test_request.py:55 
+ ==========【查询】测试用例开始 ==========:text:&#x27;查询接口_1003&#x27; (XF:104)
+DEBUG    root:test_request.py:57 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 200, &#x27;success&#x27;: True, &#x27;message&#x27;: &#x27;操作成功&#x27;, &#x27;data&#x27;: {&#x27;total&#x27;: 4524, &#x27;records&#x27;: [{&#x27;id&#x27;: 7212, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479584311.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:59:44&#x27;}, {&#x27;id&#x27;: 7211, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479557927.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:59:18&#x27;}, {&#x27;id&#x27;: 7208, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479556991.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:59:17&#x27;}, {&#x27;id&#x27;: 7209, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479557296.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:59:17&#x27;}, {&#x27;id&#x27;: 7210, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479557629.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:59:17&#x27;}, {&#x27;id&#x27;: 7207, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479556711.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:59:16&#x27;}, {&#x27;id&#x27;: 7206, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479505372.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:25&#x27;}, {&#x27;id&#x27;: 7203, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479501868.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:22&#x27;}, {&#x27;id&#x27;: 7204, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479502170.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:22&#x27;}, {&#x27;id&#x27;: 7205, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479502433.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:22&#x27;}, {&#x27;id&#x27;: 7200, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479497873.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:18&#x27;}, {&#x27;id&#x27;: 7201, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479498152.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:18&#x27;}, {&#x27;id&#x27;: 7202, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479498457.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:18&#x27;}, {&#x27;id&#x27;: 7197, &#x27;cameraId&#x27;: 1, &#x27;cameraName&#x27;: &#x27;200&#x27;, &#x27;controlId&#x27;: 11, &#x27;controlName&#x27;: &#x27;抱头&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/2_HoldHead_1621479496941.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-20 10:58:17&#x27;}], &#x27;pageIndex&#x27;: 1, &#x27;pageSize&#x27;: 14}, &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+DEBUG    root:test_request.py:58 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功02&#x27;}
+DEBUG    root:test_request.py:62 
+ ==========【查询】用例失败,预期结果与实际结果不一致==========<br/></div></td></tr></tbody>
+      <tbody class="failed results-table-row">
+        <tr>
+          <td class="col-result">Failed</td>
+          <td class="col-name">test_request.py::TestSelect::test_select[CaseName3-inBody3-expData3]</td>
+          <td class="col-duration">0.06</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log">self = &lt;test_case.test_request.TestSelect object at 0x000002CFDCAB36A0&gt;<br/>CaseName = text:&#x27;查询接口_1004&#x27; (XF:104)<br/>inBody = {&#x27;cameraParams&#x27;: [{&#x27;cameraId&#x27;: &#x27;2&#x27;, &#x27;isLocal&#x27;: 0}], &#x27;controlIds&#x27;: [1], &#x27;endTime&#x27;: &#x27;2021-5-20 11:00:00&#x27;, &#x27;pageIndex&#x27;: 1, ...}<br/>expData = {&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功03&#x27;}<br/><br/>    @pytest.mark.parametrize(&#x27;CaseName,inBody,expData&#x27;,get_excel_data(&#x27;1-登录模块&#x27;,&#x27;select&#x27;))<br/>    def test_select(self,CaseName,inBody,expData):<br/>        logger.debug(&quot;\n ==========【查询】测试用例开始 ==========:&quot;+str(CaseName))<br/>        res = Msg().add_msg(inBody,getToken=True)<br/>        logger.debug(&#x27;\n ----------【实际结果】 ----------:&#x27; + str(res))<br/>        logger.debug(&#x27;\n ----------【预期结果】 ----------:&#x27; + str(expData))<br/>        try:<br/>&gt;           assert res[&#x27;message&#x27;] == expData[&#x27;message&#x27;]<br/><span class="error">E           AssertionError: assert &#x27;操作成功&#x27; == &#x27;操作成功03&#x27;</span><br/><span class="error">E             - 操作成功03</span><br/><span class="error">E             ?     --</span><br/><span class="error">E             + 操作成功</span><br/><br/>test_request.py:60: AssertionError<br/><br/>During handling of the above exception, another exception occurred:<br/><br/>self = &lt;test_case.test_request.TestSelect object at 0x000002CFDCAB36A0&gt;<br/>CaseName = text:&#x27;查询接口_1004&#x27; (XF:104)<br/>inBody = {&#x27;cameraParams&#x27;: [{&#x27;cameraId&#x27;: &#x27;2&#x27;, &#x27;isLocal&#x27;: 0}], &#x27;controlIds&#x27;: [1], &#x27;endTime&#x27;: &#x27;2021-5-20 11:00:00&#x27;, &#x27;pageIndex&#x27;: 1, ...}<br/>expData = {&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功03&#x27;}<br/><br/>    @pytest.mark.parametrize(&#x27;CaseName,inBody,expData&#x27;,get_excel_data(&#x27;1-登录模块&#x27;,&#x27;select&#x27;))<br/>    def test_select(self,CaseName,inBody,expData):<br/>        logger.debug(&quot;\n ==========【查询】测试用例开始 ==========:&quot;+str(CaseName))<br/>        res = Msg().add_msg(inBody,getToken=True)<br/>        logger.debug(&#x27;\n ----------【实际结果】 ----------:&#x27; + str(res))<br/>        logger.debug(&#x27;\n ----------【预期结果】 ----------:&#x27; + str(expData))<br/>        try:<br/>            assert res[&#x27;message&#x27;] == expData[&#x27;message&#x27;]<br/>        except:<br/>            logger.debug(&quot;\n ==========【查询】用例失败,预期结果与实际结果不一致==========&quot;)<br/>&gt;           assert False<br/><span class="error">E           assert False</span><br/><br/>test_request.py:63: AssertionError<br/> -------------------------------Captured log call-------------------------------- <br/>DEBUG    root:test_request.py:55 
+ ==========【查询】测试用例开始 ==========:text:&#x27;查询接口_1004&#x27; (XF:104)
+DEBUG    root:test_request.py:57 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 200, &#x27;success&#x27;: True, &#x27;message&#x27;: &#x27;操作成功&#x27;, &#x27;data&#x27;: {&#x27;total&#x27;: 19, &#x27;records&#x27;: [{&#x27;id&#x27;: 4982, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621438909758.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:41:50&#x27;}, {&#x27;id&#x27;: 4981, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621438909196.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:41:49&#x27;}, {&#x27;id&#x27;: 4929, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621438239553.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:30:39&#x27;}, {&#x27;id&#x27;: 4880, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437960115.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:26:00&#x27;}, {&#x27;id&#x27;: 4871, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437876151.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:24:36&#x27;}, {&#x27;id&#x27;: 4869, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437874955.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:24:35&#x27;}, {&#x27;id&#x27;: 4870, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437875231.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:24:35&#x27;}, {&#x27;id&#x27;: 4868, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437872584.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:24:32&#x27;}, {&#x27;id&#x27;: 4867, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437871300.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:24:31&#x27;}, {&#x27;id&#x27;: 4866, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437870072.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:24:30&#x27;}, {&#x27;id&#x27;: 4842, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437649710.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:20:49&#x27;}, {&#x27;id&#x27;: 4809, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437423290.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:17:03&#x27;}, {&#x27;id&#x27;: 4810, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437423558.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:17:03&#x27;}, {&#x27;id&#x27;: 4807, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621437420962.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-19 23:17:01&#x27;}], &#x27;pageIndex&#x27;: 1, &#x27;pageSize&#x27;: 14}, &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+DEBUG    root:test_request.py:58 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 201, &#x27;message&#x27;: &#x27;操作成功03&#x27;}
+DEBUG    root:test_request.py:62 
+ ==========【查询】用例失败,预期结果与实际结果不一致==========<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_request.py::TestLogin::test_login[CaseName0-inBody0-expData0]</td>
+          <td class="col-duration">0.02</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>INFO     root:test_request.py:45 
+ ==========【登录】测试用例开始 ==========:text:&#x27;登录接口_1001&#x27; (XF:102)
+INFO     root:test_request.py:48 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 5104, &#x27;success&#x27;: False, &#x27;message&#x27;: &#x27;用户名或密码错误&#x27;, &#x27;data&#x27;: None, &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+INFO     root:test_request.py:49 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 5104, &#x27;message&#x27;: &#x27;用户名或密码错误&#x27;, &#x27;data&#x27;: None}<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_request.py::TestLogin::test_login[CaseName1-inBody1-expData1]</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>INFO     root:test_request.py:45 
+ ==========【登录】测试用例开始 ==========:text:&#x27;登录接口_1002&#x27; (XF:102)
+INFO     root:test_request.py:48 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 5104, &#x27;success&#x27;: False, &#x27;message&#x27;: &#x27;用户名或密码错误&#x27;, &#x27;data&#x27;: None, &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+INFO     root:test_request.py:49 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 5104, &#x27;message&#x27;: &#x27;用户名或密码错误&#x27;, &#x27;data&#x27;: None}<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_request.py::TestLogin::test_login[CaseName2-inBody2-expData2]</td>
+          <td class="col-duration">0.01</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>INFO     root:test_request.py:45 
+ ==========【登录】测试用例开始 ==========:text:&#x27;登录接口_1003&#x27; (XF:102)
+INFO     root:test_request.py:48 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 5001, &#x27;success&#x27;: False, &#x27;message&#x27;: &#x27;请求参数校验异常&#x27;, &#x27;data&#x27;: [&#x27;请输入密码&#x27;, &#x27;请输入账号&#x27;], &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+INFO     root:test_request.py:49 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 5001, &#x27;message&#x27;: &#x27;请求参数校验异常&#x27;, &#x27;data&#x27;: [&#x27;请输入密码&#x27;, &#x27;请输入账号&#x27;]}<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_request.py::TestLogin::test_login[CaseName3-inBody3-expData3]</td>
+          <td class="col-duration">0.02</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>INFO     root:test_request.py:45 
+ ==========【登录】测试用例开始 ==========:text:&#x27;登录接口_1004&#x27; (XF:102)
+INFO     root:test_request.py:48 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 200, &#x27;success&#x27;: True, &#x27;message&#x27;: &#x27;登录成功&#x27;, &#x27;data&#x27;: {&#x27;token&#x27;: &#x27;eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJ3ZWIiLCJpc3MiOiJzcHJpbmctYm9vdC1wbHVzIiwiZXhwIjoxNjIxNjE2MjYyLCJpYXQiOjE2MjE1ODAyNjIsImp0aSI6ImFmMmRhY2JhYjkwYTRhOTk4MTA4NDY4ZWI5MTAxYmVlIiwidXNlcm5hbWUiOiJhZG1pbiJ9.eD1DpZfzsdYY__2YzyKVgYYHto0-ruw1dM325b0yvYI&#x27;, &#x27;loginSysUserVo&#x27;: {&#x27;id&#x27;: 1, &#x27;username&#x27;: &#x27;admin&#x27;, &#x27;nickname&#x27;: &#x27;超级&#x27;, &#x27;gender&#x27;: 1, &#x27;state&#x27;: 1, &#x27;departmentId&#x27;: 1, &#x27;departmentName&#x27;: &#x27;技术部&#x27;, &#x27;roleId&#x27;: 1, &#x27;roleName&#x27;: &#x27;超级用户&#x27;, &#x27;roleCode&#x27;: &#x27;admin&#x27;, &#x27;permissionCodes&#x27;: [&#x27;sys:user:info:id&#x27;, &#x27;sys:login:log:page&#x27;, &#x27;sys:user:delete&#x27;, &#x27;sys:user:page&#x27;, &#x27;sys:user:update&#x27;, &#x27;sys:user:update:password&#x27;, &#x27;sys:user:update:head&#x27;, &#x27;sys:user:add&#x27;, &#x27;sys:user:reset:password&#x27;, &#x27;sys:statistics:count&#x27;, &#x27;sys:operation:log:page&#x27;]}}, &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+INFO     root:test_request.py:49 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 200, &#x27;message&#x27;: &#x27;登录成功&#x27;}<br/></div></td></tr></tbody>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">test_request.py::TestSelect::test_select[CaseName0-inBody0-expData0]</td>
+          <td class="col-duration">0.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>DEBUG    root:test_request.py:55 
+ ==========【查询】测试用例开始 ==========:text:&#x27;查询接口_1001&#x27; (XF:104)
+DEBUG    root:test_request.py:57 
+ ----------【实际结果】 ----------:{&#x27;code&#x27;: 200, &#x27;success&#x27;: True, &#x27;message&#x27;: &#x27;操作成功&#x27;, &#x27;data&#x27;: {&#x27;total&#x27;: 259, &#x27;records&#x27;: [{&#x27;id&#x27;: 10532, &#x27;cameraId&#x27;: 4, &#x27;cameraName&#x27;: &#x27;70&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/7_Wave_1621578503868.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 14:28:24&#x27;}, {&#x27;id&#x27;: 10489, &#x27;cameraId&#x27;: 3, &#x27;cameraName&#x27;: &#x27;4&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/4_Wave_1621571842834.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 12:37:23&#x27;}, {&#x27;id&#x27;: 10490, &#x27;cameraId&#x27;: 3, &#x27;cameraName&#x27;: &#x27;4&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/4_Wave_1621571843091.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 12:37:23&#x27;}, {&#x27;id&#x27;: 10427, &#x27;cameraId&#x27;: 4, &#x27;cameraName&#x27;: &#x27;70&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/7_Wave_1621568678834.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:44:39&#x27;}, {&#x27;id&#x27;: 10428, &#x27;cameraId&#x27;: 4, &#x27;cameraName&#x27;: &#x27;70&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/7_Wave_1621568679107.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:44:39&#x27;}, {&#x27;id&#x27;: 10429, &#x27;cameraId&#x27;: 4, &#x27;cameraName&#x27;: &#x27;70&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/7_Wave_1621568679377.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:44:39&#x27;}, {&#x27;id&#x27;: 10425, &#x27;cameraId&#x27;: 4, &#x27;cameraName&#x27;: &#x27;70&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/7_Wave_1621568678209.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:44:38&#x27;}, {&#x27;id&#x27;: 10426, &#x27;cameraId&#x27;: 4, &#x27;cameraName&#x27;: &#x27;70&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/7_Wave_1621568678506.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 11:44:38&#x27;}, {&#x27;id&#x27;: 9106, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621560431724.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 09:27:12&#x27;}, {&#x27;id&#x27;: 9107, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621560431975.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 09:27:12&#x27;}, {&#x27;id&#x27;: 9108, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621560432236.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 09:27:12&#x27;}, {&#x27;id&#x27;: 9109, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621560432687.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 09:27:12&#x27;}, {&#x27;id&#x27;: 9103, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621560430965.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 09:27:11&#x27;}, {&#x27;id&#x27;: 9104, &#x27;cameraId&#x27;: 2, &#x27;cameraName&#x27;: &#x27;6&#x27;, &#x27;controlId&#x27;: 1, &#x27;controlName&#x27;: &#x27;挥手求救&#x27;, &#x27;isLocal&#x27;: 0, &#x27;alertLevet&#x27;: 1, &#x27;imageUrl&#x27;: &#x27;/yhsp/6_Wave_1621560431214.jpg&#x27;, &#x27;videoUrl&#x27;: &#x27;&#x27;, &#x27;falsePositive&#x27;: 0, &#x27;createTime&#x27;: &#x27;2021-05-21 09:27:11&#x27;}], &#x27;pageIndex&#x27;: 1, &#x27;pageSize&#x27;: 14}, &#x27;time&#x27;: &#x27;2021-05-21 14:57:42&#x27;}
+DEBUG    root:test_request.py:58 
+ ----------【预期结果】 ----------:{&#x27;code&#x27;: 200, &#x27;message&#x27;: &#x27;操作成功&#x27;}<br/></div></td></tr></tbody></table></body></html>
